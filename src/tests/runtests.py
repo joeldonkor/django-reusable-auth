@@ -1,3 +1,4 @@
+from datetime import timedelta
 import os
 import sys
 
@@ -14,6 +15,7 @@ def run_tests():
     # Configure minimal Django settings for testing your package
     settings.configure(
         DEBUG=True,
+        SECRET_KEY='test-secret-key-not-for-production',  # Required by simplejwt to sign tokens
         DATABASES={
             'default': {
                 'ENGINE': 'django.db.backends.sqlite3',
@@ -25,9 +27,35 @@ def run_tests():
             'django.contrib.contenttypes',
             'rest_framework',        # Required since your package uses DRF
             'reusable_auth',    # Your reusable application
+            'rest_framework_simplejwt.token_blacklist',  # Optional: If you want to use token blacklisting
+
         ],
+        ROOT_URLCONF='reusable_auth.urls',  # Exposes the package's endpoints to the test client
         AUTH_USER_MODEL='reusable_auth.CustomUser',  # Points to your package's model
         DEFAULT_AUTO_FIELD='django.db.models.BigAutoField',
+        AUTH_PASSWORD_VALIDATORS=[
+            {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+            {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+            {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+            {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+        ],
+        PASSWORD_HASHERS=['django.contrib.auth.hashers.MD5PasswordHasher'],  # Fast hashing for tests only
+
+        REST_FRAMEWORK={
+            'DEFAULT_AUTHENTICATION_CLASSES': ( 
+                'rest_framework_simplejwt.authentication.JWTAuthentication',
+
+            ),  
+        },
+        
+        SIMPLE_JWT = {
+            'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
+            'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+            'ROTATE_REFRESH_TOKENS': True,
+            'BLACKLIST_AFTER_ROTATION': True,
+            'UPDATE_LAST_LOGIN': True,
+            'AUTH_HEADER_TYPES': ('Bearer',),
+        }
     )
 
     # Initialize Django
