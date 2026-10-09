@@ -7,6 +7,18 @@ class CustomUserManager(BaseUserManager):
     Custom user model manager where email is the unique identifiers
     for authentication instead of usernames.
     """
+    @classmethod
+    def normalize_email(cls, email):
+        """
+        Lowercase the whole address (Django only lowercases the domain) so
+        "John@x.com" and "john@x.com" are treated as the same account.
+        """
+        return (email or "").strip().lower()
+
+    def get_by_natural_key(self, email):
+        # Used by authenticate(), so login is case-insensitive too
+        return self.get(**{self.model.USERNAME_FIELD: self.normalize_email(email)})
+
     def create_user(self, email, password, **extra_fields):
         """
         Create and save a user with the given email and password.
