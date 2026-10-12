@@ -4,3 +4,11 @@ docs/personal.md
 # Python bytecode cache
 __pycache__/
 *.pyc
+
+# Local SQLite databases
+*.sqlite3
+
+# Packaging build output
+build/
+dist/
+*.egg-info/

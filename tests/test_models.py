@@ -13,11 +13,6 @@ class CustomUserModelTest(TestCase):
             password="securepassword123"
         )
 
-        print("\n=== VIEWING CREATED MODEL VALUE ===")
-        print(f"User created: {user.email}")
-        print(f"First name: {user.first_name}")
-        print(f"Last name: {user.last_name}")
-        print(f"Password is correct: {user.check_password('securepassword123')}")
         self.assertEqual(user.email, "johndoe@example.com")
         self.assertEqual(user.first_name, "John")
         self.assertEqual(user.last_name, "Doe")
