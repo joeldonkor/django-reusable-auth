@@ -2,9 +2,10 @@ import hashlib
 import logging
 import time
 
-from django.conf import settings
 from django.core.cache import cache
 
+from reusable_auth.conf import get_setting
+from reusable_auth.exceptions import AccountLocked
 from reusable_auth.managers import CustomUserManager
 
 logger = logging.getLogger(__name__)
@@ -22,26 +23,8 @@ logger = logging.getLogger(__name__)
 #   lockouts key: how many times the account was locked recently, used to make
 #                 each new lock longer than the last (progressive lockout)
 #
-# All keys expire on their own, so nothing needs cleaning up.
-
-DEFAULTS = {
-    "LOGIN_MAX_FAILURES": 5,                 # wrong passwords allowed per window
-    "LOGIN_FAILURE_WINDOW": 15 * 60,         # seconds the failure count is kept
-    "LOGIN_LOCKOUT_DURATION": 15 * 60,       # seconds the first lock lasts; doubles on each repeat
-    "LOGIN_LOCKOUT_MAX_DURATION": 24 * 60 * 60,  # longest a lock can get
-    "LOGIN_LOCKOUT_RESET_AFTER": 24 * 60 * 60,   # seconds after a lock ends before doubling resets
-}
-
-
-class AccountLockedError(Exception):
-    def __init__(self, retry_after):
-        super().__init__("Too many failed login attempts. Try again later.")
-        self.retry_after = retry_after
-
-
-def get_setting(name):
-    # Read at call time so the host project (and tests) can override it
-    return getattr(settings, "REUSABLE_AUTH", {}).get(name, DEFAULTS[name])
+# All keys expire on their own, so nothing needs cleaning up. Settings are
+# in conf.py.
 
 
 def _digest(email):
@@ -61,11 +44,11 @@ def _keys(email):
 
 
 def check_not_locked(email):
-    """Raise AccountLockedError if this email is currently locked out."""
+    """Raise AccountLocked if this email is currently locked out."""
     _, lock_key, _ = _keys(email)
     locked_until = cache.get(lock_key)
     if locked_until is not None:
-        raise AccountLockedError(retry_after=max(1, int(locked_until - time.time())))
+        raise AccountLocked(wait=max(1, int(locked_until - time.time())))
 
 
 def record_failed_login(email):

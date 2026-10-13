@@ -1,10 +1,11 @@
+from django.apps import apps
 from django.conf import settings
 from django.core.cache import caches
 from django.core.cache.backends.dummy import DummyCache
 from django.core.cache.backends.locmem import LocMemCache
 from django.core.checks import Error, Tags, Warning, register
 
-from reusable_auth.security import DEFAULTS
+from reusable_auth.conf import DEFAULTS
 
 
 # -----------------------------------------------------------------------------
@@ -48,3 +49,15 @@ def check_settings(app_configs, **kwargs):
         )
         for name in sorted(unknown)
     ]
+
+
+@register()
+def check_token_blacklist_installed(app_configs, **kwargs):
+    # Logout works by blacklisting the refresh token, which needs this app's tables
+    if apps.is_installed("rest_framework_simplejwt.token_blacklist"):
+        return []
+    return [Error(
+        "rest_framework_simplejwt.token_blacklist is not in INSTALLED_APPS, so logout cannot revoke tokens.",
+        hint="Add it to INSTALLED_APPS and run migrate.",
+        id="reusable_auth.E002",
+    )]

@@ -49,3 +49,8 @@ class RegisterRateThrottle(AuthRateThrottle):
 class RefreshRateThrottle(AuthRateThrottle):
     scope = "auth_refresh"
     default_rate = "30/min"
+
+
+class LogoutRateThrottle(AuthRateThrottle):
+    scope = "auth_logout"
+    default_rate = "30/min"

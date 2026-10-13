@@ -9,7 +9,8 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
-from reusable_auth.security import AccountLockedError, _keys, unlock_account
+from reusable_auth.exceptions import AccountLocked, InvalidCredentials
+from reusable_auth.security import _keys, unlock_account
 from reusable_auth.services import login_user
 
 User = get_user_model()
@@ -42,8 +43,8 @@ class ThrottleTest(APITestCase):
 
     @drf_settings(auth_login="2/min")
     def test_login_is_throttled_per_ip(self):
-        self.assertEqual(self.login().status_code, 400)
-        self.assertEqual(self.login().status_code, 400)
+        self.assertEqual(self.login().status_code, 401)
+        self.assertEqual(self.login().status_code, 401)
         response = self.login()
         self.assertEqual(response.status_code, 429)
         self.assertIn("Retry-After", response.headers)
@@ -52,7 +53,7 @@ class ThrottleTest(APITestCase):
     def test_other_ips_are_not_affected(self):
         self.login(ip="10.0.0.1")
         self.assertEqual(self.login(ip="10.0.0.1").status_code, 429)
-        self.assertEqual(self.login(ip="10.0.0.2").status_code, 400)
+        self.assertEqual(self.login(ip="10.0.0.2").status_code, 401)
 
     @drf_settings(auth_login="1/min")
     def test_scopes_are_counted_separately(self):
@@ -71,7 +72,7 @@ class ThrottleTest(APITestCase):
         # Above the 10/min default. A new email each time so the per-account
         # lockout (layer 2) doesn't kick in and hide what this test checks.
         for i in range(15):
-            self.assertEqual(self.login(email=f"user{i}@example.com").status_code, 400)
+            self.assertEqual(self.login(email=f"user{i}@example.com").status_code, 401)
 
     def test_default_rates_apply_without_settings(self):
         for _ in range(10):
@@ -90,17 +91,17 @@ class LockoutServiceTest(TestCase):
 
     def fail(self, email="jane@example.com", times=1):
         for _ in range(times):
-            with self.assertRaises(ValueError):
+            with self.assertRaises(InvalidCredentials):
                 login_user(email=email, password="wrongpassword")
 
     def test_account_locks_after_max_failures(self):
         self.fail(times=3)
-        with self.assertRaises(AccountLockedError):
+        with self.assertRaises(AccountLocked):
             login_user(email="jane@example.com", password="wrongpassword")
 
     def test_locked_account_rejects_correct_password(self):
         self.fail(times=3)
-        with self.assertRaises(AccountLockedError):
+        with self.assertRaises(AccountLocked):
             login_user(email="jane@example.com", password="securepassword123")
 
     def test_success_resets_failure_count(self):
@@ -113,12 +114,12 @@ class LockoutServiceTest(TestCase):
         self.fail(email="jane@example.com")
         self.fail(email="JANE@example.com")
         self.fail(email="Jane@Example.com")
-        with self.assertRaises(AccountLockedError):
+        with self.assertRaises(AccountLocked):
             login_user(email="jane@example.com", password="securepassword123")
 
     def test_unknown_email_locks_like_a_real_one(self):
         self.fail(email="nobody@example.com", times=3)
-        with self.assertRaises(AccountLockedError):
+        with self.assertRaises(AccountLocked):
             login_user(email="nobody@example.com", password="wrongpassword")
 
     def test_lock_only_affects_that_account(self):
@@ -151,13 +152,13 @@ class ProgressiveLockoutTest(TestCase):
 
     def lock_and_get_duration(self):
         for _ in range(3):
-            with self.assertRaises(ValueError):
+            with self.assertRaises(InvalidCredentials):
                 login_user(email=self.email, password="wrongpassword")
-        with self.assertRaises(AccountLockedError) as ctx:
+        with self.assertRaises(AccountLocked) as ctx:
             login_user(email=self.email, password="wrongpassword")
         # Simulate the lock running out, without waiting, but keep the lockout history
         cache.delete(_keys(self.email)[1])
-        return ctx.exception.retry_after
+        return ctx.exception.wait
 
     def test_each_lockout_doubles_up_to_the_max(self):
         durations = [self.lock_and_get_duration() for _ in range(4)]
@@ -182,7 +183,7 @@ class UnlockTest(TestCase):
 
     def lock(self):
         for _ in range(3):
-            with self.assertRaises(ValueError):
+            with self.assertRaises(InvalidCredentials):
                 login_user(email="jane@example.com", password="wrongpassword")
 
     def test_unlock_account_allows_login(self):

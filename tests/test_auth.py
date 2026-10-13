@@ -5,6 +5,7 @@ from django.urls import reverse
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
+from reusable_auth.exceptions import InvalidCredentials
 from reusable_auth.serializers import UserLoginSerializer, UserRegistrationSerializer, UserSerializer
 from reusable_auth.services import get_tokens_for_user, login_user, register_user
 
@@ -153,16 +154,16 @@ class ServicesTest(TestCase):
 
     def test_login_user_with_wrong_password_raises(self):
         User.objects.create_user(email="jane@example.com", password="securepassword123")
-        with self.assertRaises(ValueError):
+        with self.assertRaises(InvalidCredentials):
             login_user(email="jane@example.com", password="wrongpassword")
 
     def test_login_user_with_unknown_email_raises(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(InvalidCredentials):
             login_user(email="nobody@example.com", password="securepassword123")
 
     def test_login_user_inactive_user_raises(self):
         User.objects.create_user(email="jane@example.com", password="securepassword123", is_active=False)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(InvalidCredentials):
             login_user(email="jane@example.com", password="securepassword123")
 
     def test_get_tokens_for_user_returns_tokens_for_that_user(self):
@@ -230,15 +231,14 @@ class LoginViewTest(APITestCase):
             self.url, {"email": "jane@example.com", "password": "securepassword123"}, format="json"
         )
         self.assertEqual(response.status_code, 200)
-        self.assertIn("access", response.data["tokens"])
-        self.assertIn("refresh", response.data["tokens"])
+        self.assertEqual(set(response.data), {"access", "refresh"})
 
-    def test_login_wrong_password_returns_400(self):
+    def test_login_wrong_password_returns_401(self):
         response = self.client.post(
             self.url, {"email": "jane@example.com", "password": "wrongpassword"}, format="json"
         )
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("error", response.data)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.data["detail"], "Invalid email or password.")
 
     def test_login_missing_fields_returns_400(self):
         response = self.client.post(self.url, {}, format="json")

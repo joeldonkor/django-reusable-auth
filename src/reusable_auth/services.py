@@ -1,5 +1,5 @@
-from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
+from reusable_auth.exceptions import InvalidCredentials
 from reusable_auth.models import CustomUser
 from reusable_auth.security import check_not_locked, record_failed_login, reset_failed_logins
 from django.db import IntegrityError, transaction
@@ -57,7 +57,7 @@ def login_user(email, password):
     user = authenticate(email=email, password=password)
     if user is None:
         record_failed_login(email)
-        raise ValueError("Invalid email or password.")
+        raise InvalidCredentials()
 
     reset_failed_logins(email)
     update_last_login(None, user)
