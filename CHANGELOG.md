@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
 ## [1.0.0] - 2026-10-13
 
 First release on PyPI.
@@ -55,4 +57,5 @@ Initial development version, not published.
 - Custom email-based user model.
 - JWT registration, login and token refresh endpoints.
 
+[Unreleased]: https://github.com/joeldonkor/django-reusable-auth/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/joeldonkor/django-reusable-auth/releases/tag/v1.0.0
