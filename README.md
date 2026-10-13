@@ -1,12 +1,16 @@
 # django-reusable-auth
 
+[![tests](https://github.com/joeldonkor/django-reusable-auth/actions/workflows/tests.yaml/badge.svg)](https://github.com/joeldonkor/django-reusable-auth/actions/workflows/tests.yaml)
+[![PyPI](https://img.shields.io/pypi/v/django-reusable-auth)](https://pypi.org/project/django-reusable-auth/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/joeldonkor/django-reusable-auth/blob/main/LICENSE)
+
 A secure, reusable authentication foundation for **Django and Django REST Framework (DRF)** projects.
 
 ## Overview
 
 `django-reusable-auth` is an open-source authentication package designed to help Django developers implement authentication without repeatedly rebuilding the same authentication logic for every project.
 
-The project provides a modular and configurable foundation for common authentication requirements such as user registration, login, JWT authentication, token management, password management, email verification, sessions, and security controls.
+It provides a configurable foundation for common authentication requirements: user registration, login, JWT authentication, token management, password management, email verification, sessions and security controls.
 
 The goal is simple:
 
@@ -16,7 +20,7 @@ The goal is simple:
 
 Authentication is a core part of almost every application, yet developers often find themselves implementing similar authentication functionality repeatedly.
 
-This project aims to provide a reliable foundation that developers can install, configure, and extend according to the requirements of their application.
+This project provides a reliable foundation that developers can install, configure, and extend according to the requirements of their application.
 
 Instead of:
 
@@ -41,114 +45,134 @@ The goal is:
 * 🔐 **Security-first** — secure defaults and established Django security practices.
 * ♻️ **Reusable** — designed to work across multiple Django/DRF projects.
 * ⚙️ **Configurable** — adapt authentication behavior without modifying the package source.
-* 🧩 **Modular** — authentication components should be independently maintainable and extensible.
-* 🧪 **Tested** — authentication and security flows will be covered by automated tests.
-* 📚 **Well documented** — developers should be able to install and use the package without needing to understand its internal implementation.
+* 🧩 **Modular** — authentication components are independently maintainable and extensible.
+* 🧪 **Tested** — authentication and security flows are covered by automated tests.
+* 📚 **Well documented** — developers can install and use the package without needing to understand its internal implementation.
 * 🌱 **Open source** — developed transparently and intended for community use and contribution.
 
-## Planned Features
+## Features
 
-The project will be developed incrementally.
+**Authentication**
 
-### Authentication
+* Email-based user model (case-insensitive emails)
+* Registration, login and logout
+* JWT access and refresh tokens, with refresh-token rotation
+* Current-user endpoint
 
-* User registration
-* Login
-* Logout ✅
-* JWT access and refresh tokens
-* Token refresh
-* Token revocation ✅
-* Current-user endpoint ✅
+**Account management**
 
-### Account Management
+* Email verification, with resend
+* Password change and password reset
+* Session management: list sessions, revoke one, log out everywhere
+* Account deactivation
 
-* Password change ✅
-* Password reset ✅
-* Email verification ✅
-* Email verification resend ✅
-* Account activation/deactivation ✅
-* Session management ✅
+**Security**
 
-### Security
+* Per-IP, per-endpoint rate limiting
+* Progressive account lockout after failed logins
+* Refresh-token reuse detection
+* Single-use, expiring emailed links
+* Responses that don't reveal which emails are registered
+* Password validation with your project's `AUTH_PASSWORD_VALIDATORS`
+* Startup checks that catch insecure configuration
 
-* Secure password hashing
-* Password validation
-* Refresh-token rotation
-* Token expiration
-* Token reuse detection ✅
-* Session revocation ✅
-* Brute-force protection (progressive account lockout) ✅
-* Rate limiting (per-IP, per-endpoint throttling) ✅
-* Security-focused automated tests
+**Developer experience**
 
-### Developer Experience
+* Configurable settings with secure defaults
+* Overridable email templates, or your own email sender
+* OpenAPI schema (optional, with drf-spectacular)
+* [Example project](https://github.com/joeldonkor/django-reusable-auth/tree/main/examples/demo)
+* Tested on Python 3.10–3.14, Django 5.2–6.1, SQLite, PostgreSQL and Redis
 
-* Configurable settings
-* REST API endpoints
-* OpenAPI documentation
-* Example Django project
-* Automated testing
-* CI/CD
-* PyPI distribution
+## Requirements
 
-## Technology
+* Python 3.10+
+* Django 5.2+
+* Django REST Framework 3.16+
+* djangorestframework-simplejwt 5.5+
 
-The initial version is planned around:
+## Installation
 
-* **Python 3.14**
-* **Django**
-* **Django REST Framework**
-* **PostgreSQL**
-* **JWT**
-* **pytest / pytest-django**
-* **GitHub Actions**
+```bash
+pip install django-reusable-auth
+
+# or, with OpenAPI schema support
+pip install "django-reusable-auth[openapi]"
+```
+
+## Quick start
+
+> ⚠️ The package provides its own user model. Django can't easily switch the user model of a project that has already run migrations, so **add it to a new project**, before the first `migrate`.
+
+**1. Settings**
+
+```python
+from datetime import timedelta
+
+INSTALLED_APPS = [
+    # ...
+    "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
+    "reusable_auth",
+]
+
+AUTH_USER_MODEL = "reusable_auth.CustomUser"
+
+TEMPLATES = [{
+    "BACKEND": "django.template.backends.django.DjangoTemplates",
+    "APP_DIRS": True,  # lets Django find the email templates
+    # ...
+}]
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+}
+
+REUSABLE_AUTH = {
+    # Pages in your frontend that receive the emailed links
+    "EMAIL_VERIFICATION_URL": "https://app.example.com/verify-email?uid={uid}&token={token}",
+    "PASSWORD_RESET_URL": "https://app.example.com/reset-password?uid={uid}&token={token}",
+}
+```
+
+Also configure an email backend, and a shared cache such as Redis for production (see [Rate Limiting](#rate-limiting)).
+
+**2. URLs**
+
+```python
+from django.urls import include, path
+
+urlpatterns = [
+    path("api/", include("reusable_auth.urls")),  # /api/auth/login/, /api/auth/register/, ...
+]
+```
+
+**3. Migrate**
+
+```bash
+python manage.py migrate
+python manage.py check   # the package reports any setup problems here
+```
+
+The [demo project](https://github.com/joeldonkor/django-reusable-auth/tree/main/examples/demo) has a complete, working configuration with interactive API docs.
 
 ## Development Philosophy
 
-This project will prioritize **security, simplicity, maintainability, and extensibility** over adding as many features as possible.
+This project prioritizes **security, simplicity, maintainability, and extensibility** over adding as many features as possible.
 
-The package will rely on established Django and Python security mechanisms rather than implementing custom cryptographic algorithms or security primitives.
+The package relies on established Django and Python security mechanisms rather than implementing custom cryptographic algorithms or security primitives.
 
-The initial release will focus on providing a strong authentication foundation before expanding into advanced capabilities such as social authentication, two-factor authentication, passkeys, and more advanced authorization.
+Version 1.0 provides a strong authentication foundation. Advanced capabilities such as social authentication, two-factor authentication, passkeys, and more advanced authorization may follow.
 
 ## Project Status
 
-🚧 **Early Development**
+✅ **Stable (1.x)**
 
-The project is currently being designed and developed. APIs, configuration options, and internal architecture may change before the first stable release.
+The API follows [semantic versioning](https://semver.org/): breaking changes only happen in a new major version. See the [changelog](https://github.com/joeldonkor/django-reusable-auth/blob/main/CHANGELOG.md) for release notes.
 
 ## Roadmap
-
-### v0.x
-
-Build and validate the core authentication foundation:
-
-* Custom user model
-* Registration
-* Login
-* JWT authentication
-* Logout
-* Password management
-* Email verification
-* Session management
-* Token security
-* Security testing
-* Documentation
-
-### v1.0
-
-The first stable release will aim to provide:
-
-* Production-oriented authentication flows
-* Secure defaults
-* Comprehensive automated tests
-* Configurable authentication behavior
-* Complete API documentation
-* Example project
-* PyPI package
-* Security documentation
-
-### Future
 
 Potential future capabilities include:
 
@@ -161,15 +185,12 @@ Potential future capabilities include:
 
 ## Project Structure
 
-The project is intended to separate reusable authentication functionality from the application that consumes it.
-
 ```text
 django-reusable-auth/
 │
-├── reusable_auth/       # Authentication package
+├── src/reusable_auth/   # Authentication package
 ├── tests/               # Unit, API and security tests
-├── examples/            # Example Django projects
-├── docs/                # Documentation
+├── examples/demo/       # Example Django project
 ├── pyproject.toml
 ├── README.md
 ├── SECURITY.md
@@ -259,7 +280,7 @@ Every endpoint uses Django REST Framework's standard error format:
 
 The package doesn't set a custom `EXCEPTION_HANDLER`, so it never changes how the rest of your API reports errors.
 
-### Requirements
+### Required settings
 
 Logout needs simplejwt's blacklist app (the package reports `reusable_auth.E002` at startup if it's missing):
 
@@ -403,13 +424,13 @@ Lockouts are logged as warnings on the `reusable_auth.security` logger. Emails a
 
 Security is a core requirement of this project.
 
-If you discover a security vulnerability, please do **not** disclose it publicly through a GitHub issue. A dedicated security reporting process will be documented before the first stable release.
+If you discover a security vulnerability, please do **not** disclose it publicly through a GitHub issue. Report it privately as described in [SECURITY.md](https://github.com/joeldonkor/django-reusable-auth/blob/main/SECURITY.md), which also lists the package's known design limits.
 
 > This project does not claim to make applications completely secure. Authentication security depends on correct configuration, deployment practices, dependencies, and the application using the package.
 
 ## License
 
-This project will be released under the **MIT License**.
+This project is released under the **MIT License**. Contributions are welcome; see [CONTRIBUTING.md](https://github.com/joeldonkor/django-reusable-auth/blob/main/CONTRIBUTING.md).
 
 ---
 

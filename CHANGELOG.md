@@ -5,8 +5,18 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.0.0] - Unreleased
+
+First stable release.
+
 ### Added
 
+- OpenAPI annotations for every endpoint, used when drf-spectacular is
+  installed (`pip install django-reusable-auth[openapi]`).
+- Example project in `examples/demo` with interactive API docs.
+- `SECURITY.md` and `CONTRIBUTING.md`.
+- CI: strict lint, 95% coverage minimum, PostgreSQL, migration and package build
+  checks, the demo project, and a release workflow publishing to PyPI.
 - Per-IP rate limiting on the login, register and token refresh endpoints
   (`429 Too Many Requests` with a `Retry-After` header), with
   defaults that can be changed through `REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]`.

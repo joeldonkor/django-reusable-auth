@@ -4,18 +4,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "django-reusable-auth"
-version = "0.1.0"
+version = "1.0.0"
 authors = [
   { name="Joel Sam Donkor", email="donkorjoel203@gmail.com" },
 ]
 description = "django-reusable-auth is an open-source authentication package designed to help Django developers implement authentication without repeatedly rebuilding the same authentication logic for every project."
 readme = "README.md"
 requires-python = ">=3.10"
+keywords = ["django", "rest-framework", "authentication", "jwt", "simplejwt", "rate-limiting"]
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Web Environment",
     "Framework :: Django",
     "Framework :: Django :: 5.2",
     "Framework :: Django :: 6.0",
     "Framework :: Django :: 6.1",
+    "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -23,6 +27,8 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
+    "Topic :: Internet :: WWW/HTTP :: Session",
+    "Topic :: Security",
 ]
 dependencies = [
     "Django>=5.2",
@@ -32,8 +38,15 @@ dependencies = [
 license = "MIT"
 license-files = ["LICEN[CS]E*"]
 
+[project.optional-dependencies]
+# OpenAPI schema and Swagger UI for the endpoints
+openapi = ["drf-spectacular>=0.28"]
+test = ["pytest", "pytest-django", "pytest-cov", "flake8", "drf-spectacular>=0.28"]
+
 [project.urls]
 Homepage = "https://github.com/joeldonkor/django-reusable-auth"
+Documentation = "https://github.com/joeldonkor/django-reusable-auth#readme"
+Changelog = "https://github.com/joeldonkor/django-reusable-auth/blob/main/CHANGELOG.md"
 Issues = "https://github.com/joeldonkor/django-reusable-auth/issues"
 
 [tool.setuptools.packages.find]
@@ -43,11 +56,16 @@ include = ["reusable_auth*"]
 [tool.setuptools.package-data]
 reusable_auth = ["templates/reusable_auth/email/*"]
 
-[project.optional-dependencies]
-test = ["pytest", "pytest-django", "flake8"]
-
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"
 pythonpath = [".", "src"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+
+[tool.coverage.run]
+source = ["reusable_auth"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
