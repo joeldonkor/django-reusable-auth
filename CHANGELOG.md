@@ -18,9 +18,22 @@ All notable changes to this project are documented here. The format is based on
   (unknown `REUSABLE_AUTH` setting).
 - Lockout events logged on the `reusable_auth.security` logger.
 - CI job that runs the test suite against Redis.
+- `POST /auth/logout/`: blacklists a refresh token. Requires
+  `rest_framework_simplejwt.token_blacklist` (checked as `reusable_auth.E002`).
+- `GET /auth/me/`: returns the authenticated user.
+- `reusable_auth.conf` module holding all package settings and their defaults.
 
 ### Changed
 
+- **Breaking:** login now returns `{"access": ..., "refresh": ...}` at the top
+  level, matching the refresh endpoint, instead of nesting them under `"tokens"`.
+- **Breaking:** wrong credentials now return `401 {"detail": ...}` instead of
+  `400 {"error": ...}`. All errors use DRF's standard format.
+- **Breaking:** `login_user()` raises `InvalidCredentials` instead of `ValueError`,
+  and `AccountLocked` (a DRF `Throttled`) instead of `AccountLockedError`.
+- Success messages use the `"detail"` key instead of `"message"`.
+- Public endpoints no longer depend on the host project's `REST_FRAMEWORK`
+  authentication and permission defaults.
 - The token refresh URL now uses `ThrottledTokenRefreshView`.
 
 ## [0.1.0]

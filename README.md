@@ -54,11 +54,11 @@ The project will be developed incrementally.
 
 * User registration
 * Login
-* Logout
+* Logout ✅
 * JWT access and refresh tokens
 * Token refresh
 * Token revocation
-* Current-user endpoint
+* Current-user endpoint ✅
 
 ### Account Management
 
@@ -178,6 +178,45 @@ django-reusable-auth/
 └── LICENSE
 ```
 
+## API
+
+| Method | Endpoint | Auth | Body | Success |
+|---|---|---|---|---|
+| `POST` | `/auth/register/` | — | `first_name`, `last_name`, `email`, `password` | `201` `{"detail": ...}` |
+| `POST` | `/auth/login/` | — | `email`, `password` | `200` `{"access": ..., "refresh": ...}` |
+| `POST` | `/auth/refresh/` | — | `refresh` | `200` `{"access": ..., "refresh": ...}` |
+| `POST` | `/auth/logout/` | — | `refresh` | `200` `{"detail": "Logged out."}` |
+| `GET` | `/auth/me/` | `Bearer <access>` | — | `200` user object |
+
+Registration responds the same way whether or not the email is already registered, so it can't be used to discover which emails have accounts.
+
+Logout blacklists the refresh token. It doesn't need an access token, since that has often expired by the time a user logs out. Access tokens can't be revoked and stay valid until they expire, so keep `ACCESS_TOKEN_LIFETIME` short.
+
+### Errors
+
+Every endpoint uses Django REST Framework's standard error format:
+
+| Status | Body | When |
+|---|---|---|
+| `400` | `{"email": ["Enter a valid email address."], ...}` | Invalid input, keyed by field |
+| `401` | `{"detail": "Invalid email or password."}` | Wrong credentials, or a missing/invalid token |
+| `429` | `{"detail": "..."}` + `Retry-After` header | Rate limited or account locked |
+
+The package doesn't set a custom `EXCEPTION_HANDLER`, so it never changes how the rest of your API reports errors.
+
+### Requirements
+
+Logout needs simplejwt's blacklist app (the package reports `reusable_auth.E002` at startup if it's missing):
+
+```python
+INSTALLED_APPS = [
+    # ...
+    "rest_framework_simplejwt.token_blacklist",
+]
+```
+
+The views set their own authentication and permission classes, so they work regardless of your `REST_FRAMEWORK` defaults. For example, login still works if your project sets `DEFAULT_PERMISSION_CLASSES` to `IsAuthenticated`.
+
 ## Rate Limiting
 
 The auth endpoints are protected by two layers that work out of the box:
@@ -224,7 +263,8 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "auth_login": "10/min",      # default
         "auth_register": "10/hour",  # default
-        "auth_refresh": "30/min",    # default; set any scope to None to disable it
+        "auth_refresh": "30/min",    # default
+        "auth_logout": "30/min",     # default; set any scope to None to disable it
     },
 }
 
@@ -256,6 +296,7 @@ The package adds Django system checks that run on `runserver`, `migrate` and `ma
 | ID | Level | Meaning |
 |---|---|---|
 | `reusable_auth.E001` | Error | The cache is `DummyCache`, so rate limiting is **completely disabled** |
+| `reusable_auth.E002` | Error | `token_blacklist` isn't installed, so logout can't revoke tokens |
 | `reusable_auth.W001` | Warning | The cache is `LocMemCache` while `DEBUG=False` |
 | `reusable_auth.W002` | Warning | Unknown key in `REUSABLE_AUTH` (likely a typo) |
 
