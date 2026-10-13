@@ -9,6 +9,36 @@ permissions:
   contents: read
 
 jobs:
+  # Lint, migrations in sync with the models, and a valid package build
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]" build twine
+
+      - name: Lint with flake8
+        run: flake8 src tests examples
+
+      - name: Check for missing migrations
+        run: django-admin makemigrations --check --dry-run --settings=tests.settings
+        env:
+          PYTHONPATH: ".:src"
+
+      - name: Build and check the package
+        run: |
+          python -m build
+          twine check --strict dist/*
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -25,8 +55,7 @@ jobs:
           - python-version: "3.10"
             django-version: "6.1"
           - python-version: "3.11"
-            django-version: "6.1"  
-
+            django-version: "6.1"
 
     steps:
       - uses: actions/checkout@v4
@@ -43,13 +72,8 @@ jobs:
           pip install -e ".[test]"
           pip install "Django==${{ matrix.django-version }}.*"
 
-      - name: Lint with flake8
-        run: |
-          flake8 src --count --select=E9,F63,F7,F82 --show-source --statistics
-          flake8 src --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-
       - name: Test with pytest
-        run: pytest
+        run: pytest --cov
 
   # Rate limiting relies on the cache. Run the suite once more against Redis, the
   # recommended production cache, since LocMemCache behaves differently
@@ -85,3 +109,64 @@ jobs:
         env:
           REDIS_URL: redis://localhost:6379/0
         run: pytest
+
+  # SQLite is lenient; PostgreSQL is what most projects run in production
+  test-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reusable_auth
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]" "psycopg[binary]"
+
+      - name: Test with pytest
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reusable_auth
+        run: pytest
+
+  # The demo project is the reference setup in the docs, so keep it working
+  demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install the package
+        run: |
+          python -m pip install --upgrade pip
+          pip install ".[openapi]"
+
+      - name: Check and migrate the demo project
+        working-directory: examples/demo
+        run: |
+          python manage.py check --fail-level WARNING
+          python manage.py migrate
