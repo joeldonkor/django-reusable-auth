@@ -1,11 +1,19 @@
+from rest_framework.exceptions import NotFound
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.exceptions import InvalidToken
+from rest_framework_simplejwt.settings import api_settings as jwt_settings
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenRefreshView
 
-from reusable_auth.serializers import UserLoginSerializer, UserRegistrationSerializer, UserSerializer
-from reusable_auth.services import get_tokens_for_user, login_user, register_user
+from reusable_auth.serializers import (
+    SessionSerializer, UserLoginSerializer, UserRegistrationSerializer, UserSerializer,
+)
+from reusable_auth.services import (
+    get_active_sessions, get_tokens_for_user, handle_refresh_token_reuse, login_user, record_refresh_rotation,
+    register_user, revoke_all_sessions, revoke_session,
+)
 from reusable_auth.throttles import (
     LoginRateThrottle, LogoutRateThrottle, RefreshRateThrottle, RegisterRateThrottle,
 )
@@ -22,6 +30,12 @@ class PublicAPIView(APIView):
     # would otherwise get a 401 from JWTAuthentication before it could log in again
     authentication_classes = []
     permission_classes = [AllowAny]
+
+
+class AuthenticatedAPIView(APIView):
+    # JWT explicitly, even if the host project defaults to session auth
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
 
 
 class UserRegistrationView(PublicAPIView):
@@ -55,6 +69,25 @@ class UserLoginView(PublicAPIView):
 class ThrottledTokenRefreshView(TokenRefreshView):
     throttle_classes = [RefreshRateThrottle]
 
+    def post(self, request, *args, **kwargs):
+        raw_token = request.data.get("refresh") if isinstance(request.data, dict) else None
+        try:
+            response = super().post(request, *args, **kwargs)
+        except InvalidToken as exc:
+            if not handle_refresh_token_reuse(raw_token):
+                raise
+            # Return the 401 instead of raising it. With ATOMIC_REQUESTS, DRF rolls
+            # back the request's transaction on exceptions, which would undo the
+            # session revocation that just happened.
+            return Response(
+                exc.detail, status=exc.status_code,
+                headers={"WWW-Authenticate": self.get_authenticate_header(request)},
+            )
+
+        if jwt_settings.ROTATE_REFRESH_TOKENS:
+            record_refresh_rotation(raw_token)
+        return response
+
 
 class LogoutView(TokenBlacklistView):
     """
@@ -72,9 +105,25 @@ class LogoutView(TokenBlacklistView):
         return Response({"detail": "Logged out."})
 
 
-class CurrentUserView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
-
+class CurrentUserView(AuthenticatedAPIView):
     def get(self, request):
         return Response(UserSerializer(request.user).data)
+
+
+class SessionListView(AuthenticatedAPIView):
+    def get(self, request):
+        """List the user's active sessions (one per logged-in device)."""
+        return Response(SessionSerializer(get_active_sessions(request.user), many=True).data)
+
+    def delete(self, request):
+        """Log out everywhere."""
+        revoke_all_sessions(request.user)
+        return Response(status=204)
+
+
+class SessionDetailView(AuthenticatedAPIView):
+    def delete(self, request, session_id):
+        # 404 for another user's session too, so ids can't be probed
+        if not revoke_session(request.user, session_id):
+            raise NotFound()
+        return Response(status=204)

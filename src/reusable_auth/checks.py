@@ -61,3 +61,18 @@ def check_token_blacklist_installed(app_configs, **kwargs):
         hint="Add it to INSTALLED_APPS and run migrate.",
         id="reusable_auth.E002",
     )]
+
+
+@register()
+def check_refresh_token_rotation(app_configs, **kwargs):
+    from rest_framework_simplejwt.settings import api_settings as jwt_settings
+
+    # Without rotation + blacklisting, a used refresh token stays valid, so a
+    # stolen one can be replayed until it expires and reuse can't be detected
+    if jwt_settings.ROTATE_REFRESH_TOKENS and jwt_settings.BLACKLIST_AFTER_ROTATION:
+        return []
+    return [Warning(
+        "Refresh token rotation is off, so refresh token reuse detection is disabled.",
+        hint='Set "ROTATE_REFRESH_TOKENS": True and "BLACKLIST_AFTER_ROTATION": True in SIMPLE_JWT.',
+        id="reusable_auth.W003",
+    )]

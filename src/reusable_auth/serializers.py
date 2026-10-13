@@ -35,4 +35,11 @@ class UserRegistrationSerializer(serializers.Serializer):
 class UserLoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=8, style={'input_type': 'password'})
- 
+
+
+class SessionSerializer(serializers.Serializer):
+    # Only these fields: the underlying OutstandingToken row also stores the full
+    # refresh token, which must never be sent back to the client
+    id = serializers.IntegerField()
+    issued_at = serializers.DateTimeField(source="created_at")
+    expires_at = serializers.DateTimeField()

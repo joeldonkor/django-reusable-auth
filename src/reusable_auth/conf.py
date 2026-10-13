@@ -19,6 +19,9 @@ DEFAULTS = {
     "LOGIN_LOCKOUT_DURATION": 15 * 60,           # seconds the first lock lasts; doubles on each repeat
     "LOGIN_LOCKOUT_MAX_DURATION": 24 * 60 * 60,  # longest a lock can get
     "LOGIN_LOCKOUT_RESET_AFTER": 24 * 60 * 60,   # seconds after a lock ends before doubling resets
+
+    # Refresh token reuse detection (see services.py)
+    "REFRESH_TOKEN_REUSE_GRACE": 10,  # seconds a just-rotated token may be resent without revoking sessions
 }
 
 
