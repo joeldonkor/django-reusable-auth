@@ -87,7 +87,7 @@ class ThrottleTest(APITestCase):
 @override_settings(REUSABLE_AUTH=LOCKOUT_SETTINGS)
 class LockoutServiceTest(TestCase):
     def setUp(self):
-        User.objects.create_user(email="jane@example.com", password="securepassword123")
+        User.objects.create_user(email_verified=True, email="jane@example.com", password="securepassword123")
 
     def fail(self, email="jane@example.com", times=1):
         for _ in range(times):
@@ -123,7 +123,7 @@ class LockoutServiceTest(TestCase):
             login_user(email="nobody@example.com", password="wrongpassword")
 
     def test_lock_only_affects_that_account(self):
-        User.objects.create_user(email="bob@example.com", password="securepassword123")
+        User.objects.create_user(email_verified=True, email="bob@example.com", password="securepassword123")
         self.fail(times=3)
         login_user(email="bob@example.com", password="securepassword123")
 
@@ -148,7 +148,7 @@ class ProgressiveLockoutTest(TestCase):
     email = "jane@example.com"
 
     def setUp(self):
-        User.objects.create_user(email=self.email, password="securepassword123")
+        User.objects.create_user(email_verified=True, email=self.email, password="securepassword123")
 
     def lock_and_get_duration(self):
         for _ in range(3):
@@ -179,7 +179,7 @@ class ProgressiveLockoutTest(TestCase):
 @override_settings(REUSABLE_AUTH=LOCKOUT_SETTINGS)
 class UnlockTest(TestCase):
     def setUp(self):
-        User.objects.create_user(email="jane@example.com", password="securepassword123")
+        User.objects.create_user(email_verified=True, email="jane@example.com", password="securepassword123")
 
     def lock(self):
         for _ in range(3):
@@ -240,7 +240,7 @@ class LockoutViewTest(APITestCase):
     url = reverse("user-login")
 
     def test_locked_account_returns_429_with_retry_after(self):
-        User.objects.create_user(email="jane@example.com", password="securepassword123")
+        User.objects.create_user(email_verified=True, email="jane@example.com", password="securepassword123")
         for _ in range(3):
             self.client.post(self.url, {"email": "jane@example.com", "password": "wrongpassword"}, format="json")
         response = self.client.post(

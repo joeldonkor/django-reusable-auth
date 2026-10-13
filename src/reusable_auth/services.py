@@ -5,13 +5,18 @@ from rest_framework_simplejwt.exceptions import TokenBackendError
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
 from rest_framework_simplejwt.state import token_backend
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework import serializers
 from reusable_auth.conf import get_setting
-from reusable_auth.exceptions import InvalidCredentials
+from reusable_auth.emails import send_password_changed_email
+from reusable_auth.exceptions import EmailNotVerified, InvalidCredentials, InvalidLink
 from reusable_auth.models import CustomUser
-from reusable_auth.security import check_not_locked, record_failed_login, reset_failed_logins
+from reusable_auth.security import check_not_locked, record_failed_login, reset_failed_logins, unlock_account
+from reusable_auth.tokens import email_verification_token, get_user_from_link, password_reset_token
 from django.db import IntegrityError, transaction
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import update_last_login
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.cache import cache
 from django.utils import timezone
 
@@ -71,8 +76,84 @@ def login_user(email, password):
         raise InvalidCredentials()
 
     reset_failed_logins(email)
+    if get_setting("REQUIRE_EMAIL_VERIFICATION") and not user.email_verified:
+        raise EmailNotVerified()
     update_last_login(None, user)
     return user
+
+
+# -----------------------------------------------------------------------------
+# Email verification
+# -----------------------------------------------------------------------------
+
+def verify_email(uid, token):
+    user = get_user_from_link(uid, token, email_verification_token)
+    if user is None:
+        raise InvalidLink()
+    user.email_verified = True
+    user.save(update_fields=["email_verified"])
+    return user
+
+
+def get_user_for_email(email, *, unverified=False):
+    """The active user with this email, or None. For endpoints that must not reveal which exists."""
+    users = CustomUser.objects.filter(email=CustomUser.objects.normalize_email(email), is_active=True)
+    if unverified:
+        users = users.filter(email_verified=False)
+    return users.first()
+
+
+# -----------------------------------------------------------------------------
+# Passwords
+# -----------------------------------------------------------------------------
+
+def _set_new_password(user, password, field):
+    # Run the host project's AUTH_PASSWORD_VALIDATORS against this user
+    try:
+        validate_password(password, user=user)
+    except DjangoValidationError as e:
+        raise serializers.ValidationError({field: list(e.messages)})
+    user.set_password(password)
+    user.save(update_fields=["password"])
+
+
+def change_password(user, old_password, new_password):
+    """Change the password and log out every session. Returns tokens for the current device."""
+    if not user.check_password(old_password):
+        raise serializers.ValidationError({"old_password": ["Incorrect password."]})
+    _set_new_password(user, new_password, "new_password")
+    # A password change is often a reaction to a suspected compromise, so end
+    # every session, including any an attacker holds, and log this device back in
+    revoke_all_sessions(user)
+    send_password_changed_email(user)
+    return get_tokens_for_user(user)
+
+
+def reset_password(uid, token, new_password):
+    user = get_user_from_link(uid, token, password_reset_token)
+    if user is None or not user.is_active:
+        raise InvalidLink()
+    _set_new_password(user, new_password, "new_password")  # also invalidates the link
+    revoke_all_sessions(user)
+    # Clicking the emailed link proves they own the address, so they're verified,
+    # and a lockout from someone guessing their old password no longer matters
+    if not user.email_verified:
+        user.email_verified = True
+        user.save(update_fields=["email_verified"])
+    unlock_account(user.email)
+    send_password_changed_email(user)
+
+
+# -----------------------------------------------------------------------------
+# Account deactivation
+# -----------------------------------------------------------------------------
+
+def deactivate_account(user, password):
+    # Ask for the password so a stolen access token alone can't close the account
+    if not user.check_password(password):
+        raise serializers.ValidationError({"password": ["Incorrect password."]})
+    user.is_active = False
+    user.save(update_fields=["is_active"])  # signals.py revokes every session
 
 
 # -----------------------------------------------------------------------------

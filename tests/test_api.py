@@ -23,7 +23,7 @@ class LogoutViewTest(APITestCase):
     url = reverse("user-logout")
 
     def setUp(self):
-        self.user = User.objects.create_user(**CREDENTIALS)
+        self.user = User.objects.create_user(email_verified=True, **CREDENTIALS)
         self.tokens = get_tokens_for_user(self.user)
 
     def test_logout_blacklists_refresh_token(self):
@@ -68,7 +68,7 @@ class CurrentUserViewTest(APITestCase):
     url = reverse("current-user")
 
     def setUp(self):
-        self.user = User.objects.create_user(first_name="Jane", **CREDENTIALS)
+        self.user = User.objects.create_user(email_verified=True, first_name="Jane", **CREDENTIALS)
         self.access = get_tokens_for_user(self.user)["access"]
 
     def test_returns_current_user(self):
@@ -107,7 +107,7 @@ class HostDefaultsTest(APITestCase):
     """
 
     def setUp(self):
-        User.objects.create_user(**CREDENTIALS)
+        User.objects.create_user(email_verified=True, **CREDENTIALS)
         for name, value in [
             ("authentication_classes", [SessionAuthentication]),
             ("permission_classes", [IsAuthenticated]),

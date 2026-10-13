@@ -7,15 +7,20 @@ from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenRefreshView
 
+from reusable_auth.conf import get_setting
+from reusable_auth.emails import send_account_exists_email, send_password_reset_email, send_verification_email
 from reusable_auth.serializers import (
+    EmailSerializer, LinkSerializer, PasswordChangeSerializer, PasswordResetConfirmSerializer, PasswordSerializer,
     SessionSerializer, UserLoginSerializer, UserRegistrationSerializer, UserSerializer,
 )
 from reusable_auth.services import (
-    get_active_sessions, get_tokens_for_user, handle_refresh_token_reuse, login_user, record_refresh_rotation,
-    register_user, revoke_all_sessions, revoke_session,
+    change_password, deactivate_account, get_active_sessions, get_tokens_for_user, get_user_for_email,
+    handle_refresh_token_reuse, login_user, record_refresh_rotation, register_user, reset_password,
+    revoke_all_sessions, revoke_session, verify_email,
 )
 from reusable_auth.throttles import (
-    LoginRateThrottle, LogoutRateThrottle, RefreshRateThrottle, RegisterRateThrottle,
+    AccountChangeRateThrottle, LinkConfirmRateThrottle, LoginRateThrottle, LogoutRateThrottle,
+    PasswordResetRateThrottle, RefreshRateThrottle, RegisterRateThrottle, VerificationResendRateThrottle,
 )
 
 
@@ -47,11 +52,22 @@ class UserRegistrationView(PublicAPIView):
         # Respond the same way whether or not the email is already registered,
         # so this endpoint can't be used to discover which emails have accounts.
         # No tokens are returned for the same reason; clients log in afterwards.
+        # The owner of an existing account is told by email instead.
         try:
-            register_user(**serializer.validated_data)
+            user = register_user(**serializer.validated_data)
         except ValueError:
-            pass
-        return Response({"detail": "Registration received. You can now log in."}, status=201)
+            existing = get_user_for_email(serializer.validated_data["email"])
+            if existing is not None:
+                send_account_exists_email(existing)
+        else:
+            if get_setting("REQUIRE_EMAIL_VERIFICATION"):
+                send_verification_email(user)
+
+        if get_setting("REQUIRE_EMAIL_VERIFICATION"):
+            detail = "Registration received. Check your email to verify your account."
+        else:
+            detail = "Registration received. You can now log in."
+        return Response({"detail": detail}, status=201)
 
 
 class UserLoginView(PublicAPIView):
@@ -110,6 +126,16 @@ class CurrentUserView(AuthenticatedAPIView):
         return Response(UserSerializer(request.user).data)
 
 
+class DeactivateAccountView(AuthenticatedAPIView):
+    throttle_classes = [AccountChangeRateThrottle]
+
+    def post(self, request):
+        serializer = PasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        deactivate_account(request.user, **serializer.validated_data)
+        return Response(status=204)
+
+
 class SessionListView(AuthenticatedAPIView):
     def get(self, request):
         """List the user's active sessions (one per logged-in device)."""
@@ -127,3 +153,67 @@ class SessionDetailView(AuthenticatedAPIView):
         if not revoke_session(request.user, session_id):
             raise NotFound()
         return Response(status=204)
+
+
+# -----------------------------------------------------------------------------
+# Email verification
+# -----------------------------------------------------------------------------
+
+class VerifyEmailView(PublicAPIView):
+    throttle_classes = [LinkConfirmRateThrottle]
+
+    def post(self, request):
+        serializer = LinkSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        verify_email(**serializer.validated_data)  # raises InvalidLink (400)
+        return Response({"detail": "Email verified. You can now log in."})
+
+
+class ResendVerificationView(PublicAPIView):
+    throttle_classes = [VerificationResendRateThrottle]
+
+    def post(self, request):
+        serializer = EmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = get_user_for_email(serializer.validated_data["email"], unverified=True)
+        if user is not None:
+            send_verification_email(user)
+        # Same answer whether or not the email exists or is already verified
+        return Response({"detail": "If that email needs verifying, a new link is on its way."})
+
+
+# -----------------------------------------------------------------------------
+# Passwords
+# -----------------------------------------------------------------------------
+
+class PasswordChangeView(AuthenticatedAPIView):
+    throttle_classes = [AccountChangeRateThrottle]
+
+    def post(self, request):
+        serializer = PasswordChangeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        # Every session is logged out, so this device gets fresh tokens
+        return Response(change_password(request.user, **serializer.validated_data))
+
+
+class PasswordResetView(PublicAPIView):
+    throttle_classes = [PasswordResetRateThrottle]
+
+    def post(self, request):
+        serializer = EmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = get_user_for_email(serializer.validated_data["email"])
+        if user is not None:
+            send_password_reset_email(user)
+        # Same answer whether or not the email has an account
+        return Response({"detail": "If that email has an account, a reset link is on its way."})
+
+
+class PasswordResetConfirmView(PublicAPIView):
+    throttle_classes = [LinkConfirmRateThrottle]
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        reset_password(**serializer.validated_data)  # raises InvalidLink (400)
+        return Response({"detail": "Password reset. You can now log in."})

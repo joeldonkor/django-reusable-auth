@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 # in conf.py.
 
 
-def _digest(email):
+def hash_email(email):
     # Normalize so "Jane@x.com" and "jane@x.com" share one counter. Hash so the
     # address isn't stored or logged in plain text, and the key has a fixed, safe
     # length (memcached rejects long keys or ones with spaces).
@@ -35,7 +35,7 @@ def _digest(email):
 
 
 def _keys(email):
-    digest = _digest(email)
+    digest = hash_email(email)
     return (
         f"reusable_auth:login_failures:{digest}",
         f"reusable_auth:login_lock:{digest}",
@@ -82,7 +82,7 @@ def record_failed_login(email):
 
     logger.warning(
         "Account locked after %d failed logins: email_hash=%s lockout=%d duration=%ds",
-        failures, _digest(email)[:12], lockouts, duration,
+        failures, hash_email(email)[:12], lockouts, duration,
     )
 
 
@@ -98,5 +98,5 @@ def unlock_account(email):
     was_locked = cache.get(lock_key) is not None
     cache.delete_many([failures_key, lock_key, lockouts_key])
     if was_locked:
-        logger.info("Account unlocked: email_hash=%s", _digest(email)[:12])
+        logger.info("Account unlocked: email_hash=%s", hash_email(email)[:12])
     return was_locked

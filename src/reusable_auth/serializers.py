@@ -7,7 +7,9 @@ from reusable_auth.models import CustomUser
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
-        fields = ['id', 'first_name', 'last_name', 'email', 'is_active', 'is_staff', 'is_superuser']
+        fields = [
+            'id', 'first_name', 'last_name', 'email', 'email_verified', 'is_active', 'is_staff', 'is_superuser',
+        ]
         read_only_fields = fields
 
 
@@ -43,3 +45,27 @@ class SessionSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     issued_at = serializers.DateTimeField(source="created_at")
     expires_at = serializers.DateTimeField()
+
+
+class EmailSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class LinkSerializer(serializers.Serializer):
+    # The uid and token from an emailed link
+    uid = serializers.CharField()
+    token = serializers.CharField()
+
+
+class PasswordResetConfirmSerializer(LinkSerializer):
+    # Checked against AUTH_PASSWORD_VALIDATORS in the service, once the user is known
+    new_password = serializers.CharField(write_only=True, min_length=8, style={'input_type': 'password'})
+
+
+class PasswordChangeSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True, style={'input_type': 'password'})
+    new_password = serializers.CharField(write_only=True, min_length=8, style={'input_type': 'password'})
+
+
+class PasswordSerializer(serializers.Serializer):
+    password = serializers.CharField(write_only=True, style={'input_type': 'password'})

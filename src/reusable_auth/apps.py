@@ -8,4 +8,5 @@ class ReusableAuthConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
 
     def ready(self):
-        from reusable_auth import checks  # noqa: F401  (importing registers the checks)
+        # Importing these modules registers the system checks and signal handlers
+        from reusable_auth import checks, signals  # noqa: F401

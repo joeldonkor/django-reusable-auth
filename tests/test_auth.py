@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
@@ -25,7 +25,7 @@ VALID_REGISTRATION = {
 
 class CustomUserManagerTest(TestCase):
     def test_create_user_normalizes_email_and_hashes_password(self):
-        user = User.objects.create_user(email="jane@EXAMPLE.COM", password="securepassword123")
+        user = User.objects.create_user(email_verified=True, email="jane@EXAMPLE.COM", password="securepassword123")
         self.assertEqual(user.email, "jane@example.com")
         self.assertNotEqual(user.password, "securepassword123")
         self.assertTrue(user.check_password("securepassword123"))
@@ -35,7 +35,7 @@ class CustomUserManagerTest(TestCase):
 
     def test_create_user_without_email_raises(self):
         with self.assertRaises(ValueError):
-            User.objects.create_user(email="", password="securepassword123")
+            User.objects.create_user(email_verified=True, email="", password="securepassword123")
 
     def test_create_superuser(self):
         admin = User.objects.create_superuser(email="admin@example.com", password="securepassword123")
@@ -50,21 +50,21 @@ class CustomUserManagerTest(TestCase):
             User.objects.create_superuser(email="admin@example.com", password="pw12345678", is_superuser=False)
 
     def test_create_user_lowercases_whole_email(self):
-        user = User.objects.create_user(email="  Jane.Doe@Example.com ", password="securepassword123")
+        user = User.objects.create_user(email_verified=True, email="  Jane.Doe@Example.com ", password="securepassword123")
         self.assertEqual(user.email, "jane.doe@example.com")
 
     def test_emails_differing_only_by_case_are_duplicates(self):
-        User.objects.create_user(email="jane@example.com", password="securepassword123")
+        User.objects.create_user(email_verified=True, email="jane@example.com", password="securepassword123")
         with self.assertRaises(IntegrityError):
-            User.objects.create_user(email="JANE@example.com", password="securepassword123")
+            User.objects.create_user(email_verified=True, email="JANE@example.com", password="securepassword123")
 
     def test_db_constraint_blocks_case_variant_saved_without_manager(self):
-        User.objects.create_user(email="jane@example.com", password="securepassword123")
+        User.objects.create_user(email_verified=True, email="jane@example.com", password="securepassword123")
         with self.assertRaises(IntegrityError):
             User(email="JANE@example.com").save()
 
     def test_str_returns_email(self):
-        user = User.objects.create_user(email="jane@example.com", password="securepassword123")
+        user = User.objects.create_user(email_verified=True, email="jane@example.com", password="securepassword123")
         self.assertEqual(str(user), "jane@example.com")
 
 
@@ -105,7 +105,7 @@ class SerializerTest(TestCase):
         self.assertIn("password", serializer.errors)
 
     def test_user_serializer_does_not_expose_password(self):
-        user = User.objects.create_user(email="jane@example.com", password="securepassword123")
+        user = User.objects.create_user(email_verified=True, email="jane@example.com", password="securepassword123")
         self.assertNotIn("password", UserSerializer(user).data)
 
     def test_login_serializer_requires_email_and_password(self):
@@ -143,17 +143,17 @@ class ServicesTest(TestCase):
         self.assertEqual(User.objects.count(), 1)
 
     def test_login_user_is_case_insensitive(self):
-        User.objects.create_user(email="jane@example.com", password="securepassword123")
+        User.objects.create_user(email_verified=True, email="jane@example.com", password="securepassword123")
         user = login_user(email="Jane@EXAMPLE.com", password="securepassword123")
         self.assertEqual(user.email, "jane@example.com")
 
     def test_login_user_with_valid_credentials(self):
-        User.objects.create_user(email="jane@example.com", password="securepassword123")
+        User.objects.create_user(email_verified=True, email="jane@example.com", password="securepassword123")
         user = login_user(email="jane@example.com", password="securepassword123")
         self.assertEqual(user.email, "jane@example.com")
 
     def test_login_user_with_wrong_password_raises(self):
-        User.objects.create_user(email="jane@example.com", password="securepassword123")
+        User.objects.create_user(email_verified=True, email="jane@example.com", password="securepassword123")
         with self.assertRaises(InvalidCredentials):
             login_user(email="jane@example.com", password="wrongpassword")
 
@@ -162,12 +162,12 @@ class ServicesTest(TestCase):
             login_user(email="nobody@example.com", password="securepassword123")
 
     def test_login_user_inactive_user_raises(self):
-        User.objects.create_user(email="jane@example.com", password="securepassword123", is_active=False)
+        User.objects.create_user(email_verified=True, email="jane@example.com", password="securepassword123", is_active=False)
         with self.assertRaises(InvalidCredentials):
             login_user(email="jane@example.com", password="securepassword123")
 
     def test_get_tokens_for_user_returns_tokens_for_that_user(self):
-        user = User.objects.create_user(email="jane@example.com", password="securepassword123")
+        user = User.objects.create_user(email_verified=True, email="jane@example.com", password="securepassword123")
         tokens = get_tokens_for_user(user)
         self.assertEqual(set(tokens), {"refresh", "access"})
         self.assertEqual(str(AccessToken(tokens["access"])["user_id"]), str(user.id))
@@ -200,7 +200,7 @@ class RegisterViewTest(APITestCase):
         self.assertEqual(User.objects.count(), 1)
 
     def test_register_duplicate_does_not_change_existing_password(self):
-        User.objects.create_user(email="johndoe@example.com", password="originalpassword99")
+        User.objects.create_user(email_verified=True, email="johndoe@example.com", password="originalpassword99")
         self.client.post(self.url, VALID_REGISTRATION, format="json")
         self.assertTrue(User.objects.get().check_password("originalpassword99"))
 
@@ -210,7 +210,8 @@ class RegisterViewTest(APITestCase):
         self.assertIn("password", response.data)
         self.assertEqual(User.objects.count(), 0)
 
-    def test_registered_user_can_log_in(self):
+    @override_settings(REUSABLE_AUTH={"REQUIRE_EMAIL_VERIFICATION": False})
+    def test_registered_user_can_log_in_when_verification_is_off(self):
         self.client.post(self.url, VALID_REGISTRATION, format="json")
         response = self.client.post(
             reverse("user-login"),
@@ -224,7 +225,7 @@ class LoginViewTest(APITestCase):
     url = reverse("user-login")
 
     def setUp(self):
-        self.user = User.objects.create_user(email="jane@example.com", password="securepassword123")
+        self.user = User.objects.create_user(email_verified=True, email="jane@example.com", password="securepassword123")
 
     def test_login_success_returns_tokens(self):
         response = self.client.post(
@@ -257,7 +258,7 @@ class RefreshViewTest(APITestCase):
     url = reverse("token-refresh")
 
     def setUp(self):
-        self.user = User.objects.create_user(email="jane@example.com", password="securepassword123")
+        self.user = User.objects.create_user(email_verified=True, email="jane@example.com", password="securepassword123")
         self.tokens = get_tokens_for_user(self.user)
 
     def test_refresh_returns_new_access_and_rotated_refresh(self):

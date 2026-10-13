@@ -22,6 +22,15 @@ DEFAULTS = {
 
     # Refresh token reuse detection (see services.py)
     "REFRESH_TOKEN_REUSE_GRACE": 10,  # seconds a just-rotated token may be resent without revoking sessions
+
+    # Email verification and password reset (see emails.py)
+    "REQUIRE_EMAIL_VERIFICATION": True,  # block login until the user clicks the emailed link
+    # Frontend pages the emailed links point to. {uid} and {token} are filled in;
+    # the page should POST them to the matching confirm endpoint.
+    "EMAIL_VERIFICATION_URL": None,  # e.g. "https://app.example.com/verify-email?uid={uid}&token={token}"
+    "PASSWORD_RESET_URL": None,      # e.g. "https://app.example.com/reset-password?uid={uid}&token={token}"
+    "EMAIL_COOLDOWN": 60,            # seconds before the same kind of email is sent to the same address again
+    "EMAIL_SENDER": "reusable_auth.emails.send_templated_email",  # dotted path; replace to use your own
 }
 
 

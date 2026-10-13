@@ -40,6 +40,9 @@ Issues = "https://github.com/joeldonkor/django-reusable-auth/issues"
 where = ["src"]
 include = ["reusable_auth*"]
 
+[tool.setuptools.package-data]
+reusable_auth = ["templates/reusable_auth/email/*"]
+
 [project.optional-dependencies]
 test = ["pytest", "pytest-django", "flake8"]
 

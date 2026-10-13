@@ -1,0 +1,16 @@
+{% autoescape off %}
+Hi {{ user.first_name|default:"there" }},
+
+Please confirm that {{ user.email }} is your email address.
+{% if link %}
+Open this link to verify it:
+
+{{ link }}
+{% else %}
+Verification code:
+
+uid: {{ uid }}
+token: {{ token }}
+{% endif %}
+If you didn't create an account, you can ignore this email.
+{% endautoescape %}

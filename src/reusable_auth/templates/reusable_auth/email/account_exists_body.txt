@@ -1,0 +1,8 @@
+{% autoescape off %}
+Hi {{ user.first_name|default:"there" }},
+
+Someone tried to create a new account with {{ user.email }}, but you already have one.
+
+If that was you, log in instead, or reset your password if you've forgotten it.
+If it wasn't you, you can ignore this email; nothing has changed on your account.
+{% endautoescape %}

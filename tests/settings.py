@@ -31,6 +31,13 @@ INSTALLED_APPS = [
 ]
 
 ROOT_URLCONF = "reusable_auth.urls"
+
+# Needed to render the email templates
+TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates", "APP_DIRS": True}]
+
+# Django 6.1+ configures email through MAILERS (older versions ignore it). The
+# test runner swaps every mailer for the in-memory backend anyway.
+MAILERS = {"default": {"BACKEND": "django.core.mail.backends.locmem.EmailBackend"}}
 AUTH_USER_MODEL = "reusable_auth.CustomUser"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True

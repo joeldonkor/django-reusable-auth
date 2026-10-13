@@ -54,3 +54,26 @@ class RefreshRateThrottle(AuthRateThrottle):
 class LogoutRateThrottle(AuthRateThrottle):
     scope = "auth_logout"
     default_rate = "30/min"
+
+
+class PasswordResetRateThrottle(AuthRateThrottle):
+    scope = "auth_password_reset"
+    default_rate = "5/hour"
+
+
+class VerificationResendRateThrottle(AuthRateThrottle):
+    scope = "auth_verification_resend"
+    default_rate = "5/hour"
+
+
+class LinkConfirmRateThrottle(AuthRateThrottle):
+    # Verify email and confirm password reset: both check an emailed token
+    scope = "auth_link_confirm"
+    default_rate = "30/hour"
+
+
+class AccountChangeRateThrottle(AuthRateThrottle):
+    # Password change and deactivation: both check the current password, so this
+    # limits guessing it with a stolen access token
+    scope = "auth_account_change"
+    default_rate = "10/hour"

@@ -13,6 +13,10 @@ from .managers import CustomUserManager
 class CustomUser(AbstractUser):
     username = None
     email = models.EmailField(_("email address"), unique=True)
+    email_verified = models.BooleanField(
+        _("email verified"), default=False,
+        help_text=_("Whether the user has confirmed they own this email address."),
+    )
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
