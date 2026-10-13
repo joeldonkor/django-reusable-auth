@@ -62,11 +62,11 @@ The project will be developed incrementally.
 
 ### Account Management
 
-* Password change
-* Password reset
-* Email verification
-* Email verification resend
-* Account activation/deactivation
+* Password change ✅
+* Password reset ✅
+* Email verification ✅
+* Email verification resend ✅
+* Account activation/deactivation ✅
 * Session management ✅
 
 ### Security
@@ -190,8 +190,14 @@ django-reusable-auth/
 | `GET` | `/auth/sessions/` | `Bearer <access>` | — | `200` list of active sessions |
 | `DELETE` | `/auth/sessions/` | `Bearer <access>` | — | `204` (log out everywhere) |
 | `DELETE` | `/auth/sessions/<id>/` | `Bearer <access>` | — | `204` (`404` if not yours or not active) |
+| `POST` | `/auth/me/deactivate/` | `Bearer <access>` | `password` | `204` |
+| `POST` | `/auth/email/verify/` | — | `uid`, `token` | `200` `{"detail": ...}` |
+| `POST` | `/auth/email/verify/resend/` | — | `email` | `200` `{"detail": ...}` |
+| `POST` | `/auth/password/change/` | `Bearer <access>` | `old_password`, `new_password` | `200` `{"access": ..., "refresh": ...}` |
+| `POST` | `/auth/password/reset/` | — | `email` | `200` `{"detail": ...}` |
+| `POST` | `/auth/password/reset/confirm/` | — | `uid`, `token`, `new_password` | `200` `{"detail": ...}` |
 
-Registration responds the same way whether or not the email is already registered, so it can't be used to discover which emails have accounts.
+Registration, verification resend and password reset respond the same way whether or not the email has an account, so they can't be used to discover which emails are registered. When someone registers with an email that already has an account, the owner gets an email about it instead.
 
 Logout blacklists the refresh token. It doesn't need an access token, since that has often expired by the time a user logs out. Access tokens can't be revoked and stay valid until they expire, so keep `ACCESS_TOKEN_LIFETIME` short.
 
@@ -222,6 +228,23 @@ SIMPLE_JWT = {
 }
 ```
 
+### Email verification
+
+New users must verify their email before they can log in (`REQUIRE_EMAIL_VERIFICATION`, on by default). Registration sends a link; until it's used, login with the correct password returns `403` with code `email_not_verified`, so your frontend can offer to resend it.
+
+Superusers created with `createsuperuser` are verified automatically. Users who existed before this feature was added are marked verified by the migration.
+
+### Passwords
+
+* **Change** (logged in): requires the current password, logs out **every** session, and returns fresh tokens for the current device. The user gets a "your password was changed" email.
+* **Reset** (forgotten): `/auth/password/reset/` emails a link; `/auth/password/reset/confirm/` sets the new password. This logs out every session, marks the email verified (the user just proved they own it) and clears any login lockout.
+
+Emailed links work once and expire after Django's `PASSWORD_RESET_TIMEOUT` (3 days by default). They're signed with `SECRET_KEY` and nothing is stored in the database.
+
+### Account deactivation
+
+`/auth/me/deactivate/` requires the user's password, so a stolen access token alone can't close the account. It sets `is_active = False` and revokes every session. Deactivating a user anywhere else, such as the Django admin, also revokes their sessions, so reactivating the account later doesn't bring old sessions back. Reactivation is done by an admin.
+
 ### Errors
 
 Every endpoint uses Django REST Framework's standard error format:
@@ -229,7 +252,9 @@ Every endpoint uses Django REST Framework's standard error format:
 | Status | Body | When |
 |---|---|---|
 | `400` | `{"email": ["Enter a valid email address."], ...}` | Invalid input, keyed by field |
+| `400` | `{"detail": "This link is invalid or has expired."}` | Bad or used emailed link |
 | `401` | `{"detail": "Invalid email or password."}` | Wrong credentials, or a missing/invalid token |
+| `403` | `{"detail": "Verify your email address before logging in."}` | Correct password, email not verified |
 | `429` | `{"detail": "..."}` + `Retry-After` header | Rate limited or account locked |
 
 The package doesn't set a custom `EXCEPTION_HANDLER`, so it never changes how the rest of your API reports errors.
@@ -244,6 +269,32 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
 ]
 ```
+
+### Email setup
+
+Verification, password reset and security notices are sent by email, so configure:
+
+1. **An email backend.** Django's `EMAIL_*` settings, or `MAILERS` on Django 6.1+.
+2. **Template loading**, so the package's email templates can be found (`reusable_auth.E003` if not):
+
+   ```python
+   TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates", "APP_DIRS": True}]
+   ```
+
+3. **Links to your frontend** (`reusable_auth.W004` if not set). The package fills in `{uid}` and `{token}`; your page should POST them to the matching confirm endpoint:
+
+   ```python
+   REUSABLE_AUTH = {
+       "EMAIL_VERIFICATION_URL": "https://app.example.com/verify-email?uid={uid}&token={token}",
+       "PASSWORD_RESET_URL": "https://app.example.com/reset-password?uid={uid}&token={token}",
+   }
+   ```
+
+**Changing the emails:** each email is rendered from `reusable_auth/email/<kind>_subject.txt` and `<kind>_body.txt`, plus `<kind>_body.html` if present. The kinds are `verify_email`, `password_reset`, `password_changed` and `account_exists`. To change one, put a file at the same path in your project's `templates/` folder.
+
+**Sending them your own way:** set `REUSABLE_AUTH["EMAIL_SENDER"]` to the dotted path of a function `send(kind, user, context)`. This is **recommended in production**: queue the email (for example with Celery) instead of sending it during the request. Sending takes time, and a reset request for a real account is otherwise measurably slower than one for an unknown email, which leaks which emails are registered.
+
+A failure to send is logged on the `reusable_auth.emails` logger and never turned into an error response, for the same reason. The same kind of email is sent to the same address at most once per `EMAIL_COOLDOWN` seconds (default 60), so nobody can flood an inbox from many IPs.
 
 The views set their own authentication and permission classes, so they work regardless of your `REST_FRAMEWORK` defaults. For example, login still works if your project sets `DEFAULT_PERMISSION_CLASSES` to `IsAuthenticated`.
 
@@ -294,7 +345,12 @@ REST_FRAMEWORK = {
         "auth_login": "10/min",      # default
         "auth_register": "10/hour",  # default
         "auth_refresh": "30/min",    # default
-        "auth_logout": "30/min",     # default; set any scope to None to disable it
+        "auth_logout": "30/min",     # default
+        "auth_password_reset": "5/hour",       # default
+        "auth_verification_resend": "5/hour",  # default
+        "auth_link_confirm": "30/hour",        # default: verify email, confirm reset
+        "auth_account_change": "10/hour",      # default: password change, deactivation
+        # set any scope to None to disable it
     },
 }
 
@@ -305,6 +361,11 @@ REUSABLE_AUTH = {
     "LOGIN_LOCKOUT_MAX_DURATION": 86400, # cap for repeated locks
     "LOGIN_LOCKOUT_RESET_AFTER": 86400,  # quiet seconds after a lock before durations reset
     "REFRESH_TOKEN_REUSE_GRACE": 10,     # see "Refresh token reuse detection"
+    "REQUIRE_EMAIL_VERIFICATION": True,  # see "Email verification"
+    "EMAIL_VERIFICATION_URL": None,      # see "Email setup"
+    "PASSWORD_RESET_URL": None,          # see "Email setup"
+    "EMAIL_COOLDOWN": 60,                # seconds between emails of one kind to one address
+    "EMAIL_SENDER": "reusable_auth.emails.send_templated_email",
 }
 ```
 
@@ -328,6 +389,8 @@ The package adds Django system checks that run on `runserver`, `migrate` and `ma
 |---|---|---|
 | `reusable_auth.E001` | Error | The cache is `DummyCache`, so rate limiting is **completely disabled** |
 | `reusable_auth.E002` | Error | `token_blacklist` isn't installed, so logout can't revoke tokens |
+| `reusable_auth.E003` | Error | Email templates can't be loaded (no `TEMPLATES` with `APP_DIRS`) |
+| `reusable_auth.W004` | Warning | `EMAIL_VERIFICATION_URL` or `PASSWORD_RESET_URL` isn't set |
 | `reusable_auth.W003` | Warning | Refresh token rotation is off, so reuse detection is disabled |
 | `reusable_auth.W001` | Warning | The cache is `LocMemCache` while `DEBUG=False` |
 | `reusable_auth.W002` | Warning | Unknown key in `REUSABLE_AUTH` (likely a typo) |
