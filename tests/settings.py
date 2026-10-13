@@ -1,7 +1,18 @@
+import os
 from datetime import timedelta
 
 SECRET_KEY = "test-secret-key-not-for-production"
 DEBUG = True
+
+# CI sets REDIS_URL to also run the suite against Redis, the recommended
+# production cache. Locally the tests fall back to Django's LocMemCache.
+if os.environ.get("REDIS_URL"):
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": os.environ["REDIS_URL"],
+        }
+    }
 
 DATABASES = {
     "default": {

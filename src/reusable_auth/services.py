@@ -1,6 +1,7 @@
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from reusable_auth.models import CustomUser
+from reusable_auth.security import check_not_locked, record_failed_login, reset_failed_logins
 from django.db import IntegrityError, transaction
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import update_last_login
@@ -46,9 +47,18 @@ def register_user(first_name, last_name, email, password):
         raise ValueError("A user with this email already exists.")
     return user
 
+
 def login_user(email, password):
+    # Check the lock before the password, otherwise a locked-out attacker could
+    # still learn when they've guessed right. Unknown emails are tracked too, so
+    # the lockout response doesn't reveal which emails have accounts.
+    check_not_locked(email)
+
     user = authenticate(email=email, password=password)
     if user is None:
+        record_failed_login(email)
         raise ValueError("Invalid email or password.")
+
+    reset_failed_logins(email)
     update_last_login(None, user)
     return user
