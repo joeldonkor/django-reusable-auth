@@ -138,7 +138,8 @@ class SessionListTest(SessionTestCase):
         self.assertEqual(self.client.get(self.url, **self.auth()).data, [])
 
     def test_only_lists_own_sessions(self):
-        get_tokens_for_user(User.objects.create_user(email_verified=True, email="bob@example.com", password="securepassword123"))
+        bob = User.objects.create_user(email_verified=True, email="bob@example.com", password="securepassword123")
+        get_tokens_for_user(bob)
         self.assertEqual(len(self.client.get(self.url, **self.auth()).data), 2)
 
     def test_requires_authentication(self):
@@ -164,7 +165,9 @@ class SessionDetailTest(SessionTestCase):
         self.assertEqual(self.refresh(self.laptop["refresh"]).status_code, 200)
 
     def test_cannot_revoke_another_users_session(self):
-        bob = get_tokens_for_user(User.objects.create_user(email_verified=True, email="bob@example.com", password="securepassword123"))
+        bob = get_tokens_for_user(
+            User.objects.create_user(email_verified=True, email="bob@example.com", password="securepassword123")
+        )
         response = self.client.delete(self.url(bob), **self.auth())
         self.assertEqual(response.status_code, 404)
         self.assertEqual(self.refresh(bob["refresh"]).status_code, 200)

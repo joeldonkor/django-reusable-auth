@@ -4,6 +4,7 @@ from django.test import TestCase
 # Dynamically fetch the active User model
 User = get_user_model()
 
+
 class CustomUserModelTest(TestCase):
     def test_create_user(self):
         user = User.objects.create_user(
@@ -17,6 +18,3 @@ class CustomUserModelTest(TestCase):
         self.assertEqual(user.first_name, "John")
         self.assertEqual(user.last_name, "Doe")
         self.assertTrue(user.check_password("securepassword123"))
-
-
-        
