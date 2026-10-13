@@ -57,7 +57,7 @@ The project will be developed incrementally.
 * Logout ✅
 * JWT access and refresh tokens
 * Token refresh
-* Token revocation
+* Token revocation ✅
 * Current-user endpoint ✅
 
 ### Account Management
@@ -67,7 +67,7 @@ The project will be developed incrementally.
 * Email verification
 * Email verification resend
 * Account activation/deactivation
-* Session management
+* Session management ✅
 
 ### Security
 
@@ -75,8 +75,8 @@ The project will be developed incrementally.
 * Password validation
 * Refresh-token rotation
 * Token expiration
-* Token reuse detection
-* Session revocation
+* Token reuse detection ✅
+* Session revocation ✅
 * Brute-force protection (progressive account lockout) ✅
 * Rate limiting (per-IP, per-endpoint throttling) ✅
 * Security-focused automated tests
@@ -187,10 +187,40 @@ django-reusable-auth/
 | `POST` | `/auth/refresh/` | — | `refresh` | `200` `{"access": ..., "refresh": ...}` |
 | `POST` | `/auth/logout/` | — | `refresh` | `200` `{"detail": "Logged out."}` |
 | `GET` | `/auth/me/` | `Bearer <access>` | — | `200` user object |
+| `GET` | `/auth/sessions/` | `Bearer <access>` | — | `200` list of active sessions |
+| `DELETE` | `/auth/sessions/` | `Bearer <access>` | — | `204` (log out everywhere) |
+| `DELETE` | `/auth/sessions/<id>/` | `Bearer <access>` | — | `204` (`404` if not yours or not active) |
 
 Registration responds the same way whether or not the email is already registered, so it can't be used to discover which emails have accounts.
 
 Logout blacklists the refresh token. It doesn't need an access token, since that has often expired by the time a user logs out. Access tokens can't be revoked and stay valid until they expire, so keep `ACCESS_TOKEN_LIFETIME` short.
+
+### Sessions
+
+Each logged-in device holds one refresh token, which is one session:
+
+```json
+[{"id": 42, "issued_at": "2026-10-13T15:28:00Z", "expires_at": "2026-10-20T15:28:00Z"}]
+```
+
+`issued_at` is when that device last logged in or refreshed. A session's `id` changes each time it refreshes, because rotation issues a new token. Revoking a session stops it from refreshing; its current access token keeps working until it expires.
+
+### Refresh token reuse detection
+
+With rotation on, a refresh token can only be used once. If a token that was already rotated is used again, two parties have a copy of it and one of them stole it. The package then **revokes every session for that user**, so both must log in again, and only the real owner knows the password.
+
+* Tokens that were logged out or revoked are just rejected. A device retrying with one doesn't log the user out everywhere.
+* Resending a token within `REFRESH_TOKEN_REUSE_GRACE` seconds (default `10`) of its rotation is treated as two tabs refreshing at once, not theft.
+* Rotations are tracked in the cache, so this needs the shared cache described under [Rate Limiting](#rate-limiting).
+
+Requires rotation in your simplejwt settings (the package reports `reusable_auth.W003` if it's off):
+
+```python
+SIMPLE_JWT = {
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+}
+```
 
 ### Errors
 
@@ -274,6 +304,7 @@ REUSABLE_AUTH = {
     "LOGIN_LOCKOUT_DURATION": 900,       # seconds the first lock lasts
     "LOGIN_LOCKOUT_MAX_DURATION": 86400, # cap for repeated locks
     "LOGIN_LOCKOUT_RESET_AFTER": 86400,  # quiet seconds after a lock before durations reset
+    "REFRESH_TOKEN_REUSE_GRACE": 10,     # see "Refresh token reuse detection"
 }
 ```
 
@@ -297,6 +328,7 @@ The package adds Django system checks that run on `runserver`, `migrate` and `ma
 |---|---|---|
 | `reusable_auth.E001` | Error | The cache is `DummyCache`, so rate limiting is **completely disabled** |
 | `reusable_auth.E002` | Error | `token_blacklist` isn't installed, so logout can't revoke tokens |
+| `reusable_auth.W003` | Warning | Refresh token rotation is off, so reuse detection is disabled |
 | `reusable_auth.W001` | Warning | The cache is `LocMemCache` while `DEBUG=False` |
 | `reusable_auth.W002` | Warning | Unknown key in `REUSABLE_AUTH` (likely a typo) |
 

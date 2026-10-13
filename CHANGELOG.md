@@ -22,6 +22,12 @@ All notable changes to this project are documented here. The format is based on
   `rest_framework_simplejwt.token_blacklist` (checked as `reusable_auth.E002`).
 - `GET /auth/me/`: returns the authenticated user.
 - `reusable_auth.conf` module holding all package settings and their defaults.
+- Session management: `GET /auth/sessions/` lists active sessions,
+  `DELETE /auth/sessions/<id>/` revokes one, `DELETE /auth/sessions/` logs out
+  everywhere.
+- Refresh token reuse detection: reusing a rotated refresh token revokes all of
+  the user's sessions. Configured with `REFRESH_TOKEN_REUSE_GRACE`.
+- System check `reusable_auth.W003` when refresh token rotation is off.
 
 ### Changed
 
