@@ -77,8 +77,8 @@ The project will be developed incrementally.
 * Token expiration
 * Token reuse detection
 * Session revocation
-* Brute-force protection strategies
-* Rate-limiting support
+* Brute-force protection (progressive account lockout) ✅
+* Rate limiting (per-IP, per-endpoint throttling) ✅
 * Security-focused automated tests
 
 ### Developer Experience
@@ -177,6 +177,91 @@ django-reusable-auth/
 ├── CHANGELOG.md
 └── LICENSE
 ```
+
+## Rate Limiting
+
+The auth endpoints are protected by two layers that work out of the box:
+
+* **Request throttling (per IP)** — limits how often one IP address can call each endpoint.
+* **Account lockout (per email)** — temporarily locks an email after repeated wrong passwords, even if the attempts come from many IPs.
+
+Both return **`429 Too Many Requests`** with a `Retry-After` header.
+
+### ⚠️ Production: configure a shared cache
+
+Throttle counters and lockouts are stored in **Django's cache**. If you don't configure one, Django uses `LocMemCache`, which is **not suitable for production**:
+
+* Each server process keeps its own counters, so with 4 workers an attacker gets 4× the attempts.
+* Counters and lockouts are lost whenever the server restarts.
+
+Use a cache that all processes share, such as Redis:
+
+```python
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379",
+    }
+}
+```
+
+### ⚠️ Behind a proxy or load balancer
+
+If your app runs behind Nginx, a load balancer, or a platform like Heroku, every request may appear to come from the proxy's IP, so all users would share one limit. Tell DRF how many proxies sit in front of your app so it reads the real client IP from `X-Forwarded-For`:
+
+```python
+REST_FRAMEWORK = {
+    "NUM_PROXIES": 1,
+}
+```
+
+### Configuration
+
+The defaults can be overridden in your settings:
+
+```python
+REST_FRAMEWORK = {
+    "DEFAULT_THROTTLE_RATES": {
+        "auth_login": "10/min",      # default
+        "auth_register": "10/hour",  # default
+        "auth_refresh": "30/min",    # default; set any scope to None to disable it
+    },
+}
+
+REUSABLE_AUTH = {
+    "LOGIN_MAX_FAILURES": 5,             # wrong passwords before an account is locked
+    "LOGIN_FAILURE_WINDOW": 900,         # seconds failed attempts are remembered
+    "LOGIN_LOCKOUT_DURATION": 900,       # seconds the first lock lasts
+    "LOGIN_LOCKOUT_MAX_DURATION": 86400, # cap for repeated locks
+    "LOGIN_LOCKOUT_RESET_AFTER": 86400,  # quiet seconds after a lock before durations reset
+}
+```
+
+**Progressive lockout:** each time the same account is locked again, the lock lasts twice as long (15 min → 30 min → 1 h → …, up to `LOGIN_LOCKOUT_MAX_DURATION`). A successful login, or `LOGIN_LOCKOUT_RESET_AFTER` seconds without a new lock, resets it. To use a fixed duration instead, set `LOGIN_LOCKOUT_MAX_DURATION` equal to `LOGIN_LOCKOUT_DURATION`.
+
+### Unlocking an account
+
+If a real user locks themselves out, clear the lock without waiting:
+
+```bash
+python manage.py unlock_account jane@example.com
+```
+
+or from code: `from reusable_auth.security import unlock_account`.
+
+### Startup checks and logging
+
+The package adds Django system checks that run on `runserver`, `migrate` and `manage.py check`:
+
+| ID | Level | Meaning |
+|---|---|---|
+| `reusable_auth.E001` | Error | The cache is `DummyCache`, so rate limiting is **completely disabled** |
+| `reusable_auth.W001` | Warning | The cache is `LocMemCache` while `DEBUG=False` |
+| `reusable_auth.W002` | Warning | Unknown key in `REUSABLE_AUTH` (likely a typo) |
+
+Lockouts are logged as warnings on the `reusable_auth.security` logger. Emails are logged as a short hash, never in plain text.
+
+> **Note:** account lockout can be triggered by anyone who knows a user's email. Lockouts expire automatically to limit the impact, and IP throttling limits how quickly one client can cause them.
 
 ## Security
 
