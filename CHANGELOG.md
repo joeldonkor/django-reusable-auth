@@ -1,78 +1,58 @@
 # Changelog
 
 All notable changes to this project are documented here. The format is based on
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-
-## [Unreleased]
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
+follows [Semantic Versioning](https://semver.org/).
 
 ## [1.0.0] - Unreleased
 
-First stable release.
+First release on PyPI.
 
 ### Added
 
-- OpenAPI annotations for every endpoint, used when drf-spectacular is
-  installed (`pip install django-reusable-auth[openapi]`).
-- Example project in `examples/demo` with interactive API docs.
-- `SECURITY.md` and `CONTRIBUTING.md`.
-- CI: strict lint, 95% coverage minimum, PostgreSQL, migration and package build
-  checks, the demo project, and a release workflow publishing to PyPI.
-- Per-IP rate limiting on the login, register and token refresh endpoints
-  (`429 Too Many Requests` with a `Retry-After` header), with
-  defaults that can be changed through `REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]`.
-- Per-email account lockout after repeated failed logins, with progressive
-  durations that double on each repeat lockout. Configured through `REUSABLE_AUTH`.
-- `unlock_account` management command and `reusable_auth.security.unlock_account()`.
-- System checks: `reusable_auth.E001` (DummyCache disables rate limiting),
-  `reusable_auth.W001` (LocMemCache in production) and `reusable_auth.W002`
-  (unknown `REUSABLE_AUTH` setting).
-- Lockout events logged on the `reusable_auth.security` logger.
-- CI job that runs the test suite against Redis.
-- `POST /auth/logout/`: blacklists a refresh token. Requires
-  `rest_framework_simplejwt.token_blacklist` (checked as `reusable_auth.E002`).
-- `GET /auth/me/`: returns the authenticated user.
-- `reusable_auth.conf` module holding all package settings and their defaults.
-- Session management: `GET /auth/sessions/` lists active sessions,
-  `DELETE /auth/sessions/<id>/` revokes one, `DELETE /auth/sessions/` logs out
-  everywhere.
+- Email-based user model with case-insensitive emails.
+- Endpoints for registration, login, logout, token refresh and the current user.
+- Email verification, required by default (`REQUIRE_EMAIL_VERIFICATION`), with
+  a resend endpoint.
+- Password change and password reset. Both log out every session and notify the
+  user by email.
+- Session management: list active sessions, revoke one, or log out everywhere.
+- Account deactivation, which revokes every session, including when a user is
+  deactivated outside the API.
 - Refresh token reuse detection: reusing a rotated refresh token revokes all of
-  the user's sessions. Configured with `REFRESH_TOKEN_REUSE_GRACE`.
-- System check `reusable_auth.W003` when refresh token rotation is off.
-- Email verification: `POST /auth/email/verify/` and `/auth/email/verify/resend/`.
-  New `email_verified` field on the user (migration `0002` marks existing users
-  verified).
-- Password reset: `POST /auth/password/reset/` and `/auth/password/reset/confirm/`.
-- Password change: `POST /auth/password/change/` logs out every session and
-  returns fresh tokens.
-- Account deactivation: `POST /auth/me/deactivate/`. Deactivating a user anywhere
-  revokes their sessions.
-- Emails: verification, password reset, "password changed" and "account already
-  exists" notices, rendered from overridable templates or sent through a custom
-  `EMAIL_SENDER`.
-- System checks `reusable_auth.E003` (email templates not loadable) and
-  `reusable_auth.W004` (frontend link URLs not set).
+  the user's sessions.
+- Per-IP rate limiting on the public endpoints, password change and
+  deactivation, configurable per scope.
+- Account lockout after repeated failed logins, doubling in length on each
+  repeat, and the `unlock_account` management command.
+- Registration, verification resend and password reset respond the same way
+  for every email, so they don't reveal which emails are registered.
+- Overridable email templates, and the `EMAIL_SENDER` setting for sending
+  emails another way.
+- System checks for insecure or incomplete configuration
+  (`reusable_auth.E001`–`E003`, `W001`–`W004`).
+- OpenAPI schema annotations, used when drf-spectacular is installed
+  (`django-reusable-auth[openapi]`).
+- Example project in `examples/demo`.
 
-### Changed
+### Changes from 0.1.0
 
-- **Breaking:** login now returns `{"access": ..., "refresh": ...}` at the top
-  level, matching the refresh endpoint, instead of nesting them under `"tokens"`.
-- **Breaking:** wrong credentials now return `401 {"detail": ...}` instead of
-  `400 {"error": ...}`. All errors use DRF's standard format.
-- **Breaking:** `login_user()` raises `InvalidCredentials` instead of `ValueError`,
-  and `AccountLocked` (a DRF `Throttled`) instead of `AccountLockedError`.
-- Success messages use the `"detail"` key instead of `"message"`.
-- **Breaking:** email verification is required by default
-  (`REQUIRE_EMAIL_VERIFICATION`). Login returns `403` with code
-  `email_not_verified` until the user verifies.
-- Registering with an existing email now emails that account's owner.
-- `security._digest()` is now the public `security.hash_email()`.
-- Public endpoints no longer depend on the host project's `REST_FRAMEWORK`
-  authentication and permission defaults.
-- The token refresh URL now uses `ThrottledTokenRefreshView`.
+0.1.0 was never published to PyPI. If you used it from GitHub:
 
-## [0.1.0]
+- Login returns `access` and `refresh` at the top level instead of under
+  `tokens`.
+- Wrong credentials return 401 instead of 400, and errors use DRF's standard
+  format (`detail` instead of `error`).
+- Unverified users can't log in until they verify their email. Migration
+  `0002` marks existing users as verified.
+
+## 0.1.0
+
+Initial development version, not published.
 
 ### Added
 
 - Custom email-based user model.
 - JWT registration, login and token refresh endpoints.
+
+[1.0.0]: https://github.com/joeldonkor/django-reusable-auth/releases/tag/v1.0.0
