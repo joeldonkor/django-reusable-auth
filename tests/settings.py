@@ -21,6 +21,17 @@ DATABASES = {
     }
 }
 
+# CI sets POSTGRES_HOST to also run the suite against PostgreSQL, where things
+# like the case-insensitive unique email constraint behave differently.
+if os.environ.get("POSTGRES_HOST"):
+    DATABASES["default"] = {
+        "ENGINE": "django.db.backends.postgresql",
+        "HOST": os.environ["POSTGRES_HOST"],
+        "NAME": os.environ.get("POSTGRES_DB", "reusable_auth"),
+        "USER": os.environ.get("POSTGRES_USER", "postgres"),
+        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "postgres"),
+    }
+
 INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -28,6 +39,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "reusable_auth",
+    "drf_spectacular",  # only to test the OpenAPI schema; optional for users
 ]
 
 ROOT_URLCONF = "reusable_auth.urls"
@@ -51,6 +63,7 @@ AUTH_PASSWORD_VALIDATORS = [
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]  # tests only
 
 REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),

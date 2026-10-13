@@ -9,6 +9,7 @@ from rest_framework_simplejwt.views import TokenBlacklistView, TokenRefreshView
 
 from reusable_auth.conf import get_setting
 from reusable_auth.emails import send_account_exists_email, send_password_reset_email, send_verification_email
+from reusable_auth.schema import DetailSerializer, TokensSerializer, errors, extend_schema
 from reusable_auth.serializers import (
     EmailSerializer, LinkSerializer, PasswordChangeSerializer, PasswordResetConfirmSerializer, PasswordSerializer,
     SessionSerializer, UserLoginSerializer, UserRegistrationSerializer, UserSerializer,
@@ -46,6 +47,7 @@ class AuthenticatedAPIView(APIView):
 class UserRegistrationView(PublicAPIView):
     throttle_classes = [RegisterRateThrottle]
 
+    @extend_schema(tags=["auth"], request=UserRegistrationSerializer, responses={201: DetailSerializer, **errors(429)})
     def post(self, request):
         serializer = UserRegistrationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -73,6 +75,7 @@ class UserRegistrationView(PublicAPIView):
 class UserLoginView(PublicAPIView):
     throttle_classes = [LoginRateThrottle]
 
+    @extend_schema(tags=["auth"], request=UserLoginSerializer, responses={200: TokensSerializer, **errors(401, 403, 429)})
     def post(self, request):
         serializer = UserLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -85,6 +88,7 @@ class UserLoginView(PublicAPIView):
 class ThrottledTokenRefreshView(TokenRefreshView):
     throttle_classes = [RefreshRateThrottle]
 
+    @extend_schema(tags=["auth"], responses={200: TokensSerializer, **errors(401, 429)})
     def post(self, request, *args, **kwargs):
         raw_token = request.data.get("refresh") if isinstance(request.data, dict) else None
         try:
@@ -116,12 +120,14 @@ class LogoutView(TokenBlacklistView):
     """
     throttle_classes = [LogoutRateThrottle]
 
+    @extend_schema(tags=["auth"], responses={200: DetailSerializer, **errors(401, 429)})
     def post(self, request, *args, **kwargs):
         super().post(request, *args, **kwargs)  # raises InvalidToken (401) for a bad token
         return Response({"detail": "Logged out."})
 
 
 class CurrentUserView(AuthenticatedAPIView):
+    @extend_schema(tags=["account"], responses={200: UserSerializer, **errors(401)})
     def get(self, request):
         return Response(UserSerializer(request.user).data)
 
@@ -129,6 +135,7 @@ class CurrentUserView(AuthenticatedAPIView):
 class DeactivateAccountView(AuthenticatedAPIView):
     throttle_classes = [AccountChangeRateThrottle]
 
+    @extend_schema(tags=["account"], request=PasswordSerializer, responses={204: None, **errors(401, 429)})
     def post(self, request):
         serializer = PasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -137,10 +144,15 @@ class DeactivateAccountView(AuthenticatedAPIView):
 
 
 class SessionListView(AuthenticatedAPIView):
+    @extend_schema(tags=["sessions"], responses={200: SessionSerializer(many=True), **errors(401)})
     def get(self, request):
         """List the user's active sessions (one per logged-in device)."""
         return Response(SessionSerializer(get_active_sessions(request.user), many=True).data)
 
+    @extend_schema(
+        tags=["sessions"], operation_id="sessions_revoke_all", summary="Log out everywhere",
+        responses={204: None, **errors(401)},
+    )
     def delete(self, request):
         """Log out everywhere."""
         revoke_all_sessions(request.user)
@@ -148,6 +160,7 @@ class SessionListView(AuthenticatedAPIView):
 
 
 class SessionDetailView(AuthenticatedAPIView):
+    @extend_schema(tags=["sessions"], operation_id="sessions_revoke", responses={204: None, **errors(401, 404)})
     def delete(self, request, session_id):
         # 404 for another user's session too, so ids can't be probed
         if not revoke_session(request.user, session_id):
@@ -162,6 +175,7 @@ class SessionDetailView(AuthenticatedAPIView):
 class VerifyEmailView(PublicAPIView):
     throttle_classes = [LinkConfirmRateThrottle]
 
+    @extend_schema(tags=["email"], request=LinkSerializer, responses={200: DetailSerializer, **errors(400, 429)})
     def post(self, request):
         serializer = LinkSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -172,6 +186,7 @@ class VerifyEmailView(PublicAPIView):
 class ResendVerificationView(PublicAPIView):
     throttle_classes = [VerificationResendRateThrottle]
 
+    @extend_schema(tags=["email"], request=EmailSerializer, responses={200: DetailSerializer, **errors(429)})
     def post(self, request):
         serializer = EmailSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -189,6 +204,7 @@ class ResendVerificationView(PublicAPIView):
 class PasswordChangeView(AuthenticatedAPIView):
     throttle_classes = [AccountChangeRateThrottle]
 
+    @extend_schema(tags=["password"], request=PasswordChangeSerializer, responses={200: TokensSerializer, **errors(401, 429)})
     def post(self, request):
         serializer = PasswordChangeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -199,6 +215,7 @@ class PasswordChangeView(AuthenticatedAPIView):
 class PasswordResetView(PublicAPIView):
     throttle_classes = [PasswordResetRateThrottle]
 
+    @extend_schema(tags=["password"], request=EmailSerializer, responses={200: DetailSerializer, **errors(429)})
     def post(self, request):
         serializer = EmailSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -212,6 +229,10 @@ class PasswordResetView(PublicAPIView):
 class PasswordResetConfirmView(PublicAPIView):
     throttle_classes = [LinkConfirmRateThrottle]
 
+    @extend_schema(
+        tags=["password"], request=PasswordResetConfirmSerializer,
+        responses={200: DetailSerializer, **errors(400, 429)},
+    )
     def post(self, request):
         serializer = PasswordResetConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
