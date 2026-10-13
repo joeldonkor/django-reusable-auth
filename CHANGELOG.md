@@ -6,6 +6,12 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-13
+
+### Changed
+
+- Shorter package summary on PyPI. No code changes.
+
 ## [1.0.0] - 2026-10-13
 
 First release on PyPI.
@@ -57,5 +63,6 @@ Initial development version, not published.
 - Custom email-based user model.
 - JWT registration, login and token refresh endpoints.
 
-[Unreleased]: https://github.com/joeldonkor/django-reusable-auth/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/joeldonkor/django-reusable-auth/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/joeldonkor/django-reusable-auth/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/joeldonkor/django-reusable-auth/releases/tag/v1.0.0
